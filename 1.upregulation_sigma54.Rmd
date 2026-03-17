@@ -1,0 +1,498 @@
+---
+title: "PFLU Rewiring"
+author: "Griffin Kramer"
+date: "2026-02-10"
+output: html_document
+---
+
+```{r}
+library(readr)
+library(dplyr)
+library(stringr)
+library(purrr)
+library(tidyr)
+library(tibble)
+library(DESeq2)
+library(rtracklayer)
+library(ggplot2)
+```
+
+```{r}
+#file loader function
+read_featurecounts <- function(path) {
+  fname <- basename(path)
+  sampleID <- str_remove(fname, "\\.tsv$")
+  x <- read_tsv(
+    file = path,
+    comment = "#",
+    show_col_types = FALSE
+  )
+  count_col <- names(x)[ncol(x)]
+  x %>%
+    transmute(
+      Geneid     = Geneid,
+      Length     = as.numeric(Length),
+      read_count = as.numeric(.data[[count_col]]),
+      sampleID   = sampleID
+    )
+}
+```
+
+```{r}
+#prepare annotation data
+gff_path <- "annotation_data/genomic.gff"
+gff <- import(gff_path)
+
+map_tbl <- as.data.frame(gff) %>%
+  filter(type == "gene") %>%
+  transmute(
+    rs = locus_tag,
+    pflu_raw = old_locus_tag
+  ) %>%
+  filter(!is.na(rs), !is.na(pflu_raw)) %>%
+  mutate(
+    pflu = str_extract(pflu_raw, "PFLU_\\d+[A-Z]?")
+  ) %>%
+  filter(!is.na(pflu)) %>%
+  distinct(rs, pflu)
+
+motifs_path <- "annotation_data/ProPr54Output.tab"
+motifs <- read.delim(motifs_path, check.names = FALSE)
+
+sigma54_promoter_rs <- unique(motifs$`locus-tag`)
+
+sigma54_promoter_genes <- map_tbl %>%
+  filter(rs %in% sigma54_promoter_rs) %>%
+  pull(pflu) %>%
+  unique()
+
+validated_path <- "annotation_data/journal.pbio.3002348.s014.csv" 
+S7 <- read_csv(validated_path, show_col_types = FALSE)
+sigma54_validated_genes <- unique(S7$`PseudoCAP ID`)
+
+s54_path <- "annotation_data/PseudomonasFluorescensS54InteractionDomainContainingProteins.tsv" 
+uniprot_path <- "annotation_data/uniprotkb_proteome_UP001152918_2026_01_26.tsv"                 
+
+s54 <- read_tsv(s54_path, show_col_types = FALSE)
+uniprot <- read_tsv(uniprot_path, show_col_types = FALSE)
+
+uniprot_map <- uniprot %>%
+  select(Entry, gene_names = `Gene Names`) %>%
+  mutate(locus = str_extract(gene_names, "PFLU_\\d+[A-Z]?")) %>%
+  filter(!is.na(locus)) %>%
+  distinct(Entry, locus)
+
+s54_pflu <- s54 %>%
+  left_join(uniprot_map, by = c("Accession" = "Entry"))
+
+sigma54_ebp_genes <- s54_pflu %>%
+  pull(locus) %>%
+  unique()
+
+length(sigma54_promoter_genes)
+length(sigma54_validated_genes)
+length(sigma54_ebp_genes)
+
+```
+
+
+```{r}
+### Main Method
+## load files 
+dir_path <- "data"
+
+files <- list.files(
+  dir_path,
+  pattern = "\\.tsv$",
+  full.names = TRUE
+)
+
+df_counts <- map_dfr(files, read_featurecounts)
+
+df_counts <- df_counts %>%
+  mutate(
+    strain = str_extract(sampleID, "^[0-9]{4}"),
+    strain = stringr::str_pad(strain, width = 4, side = "left", pad = "0"),
+    strain = as.character(strain),
+    evolved = if_else(str_detect(sampleID, "_E_"), "evolved", "ancestor"),
+    rhamnose = if_else(str_detect(sampleID, "_R$"), "Rha", "NoRha")
+  )
+
+## compute lOGFC
+df.nest <- df_counts %>%
+  nest(.by = c(strain, rhamnose), .key = "data")
+
+LOGFOLD <- df.nest %>% 
+  mutate(matrix = map(data, ~ .x %>% 
+                        select(Geneid, read_count, evolved) %>% 
+                        pivot_wider(names_from = evolved, values_from = read_count) %>% 
+                        column_to_rownames(var = "Geneid"))) %>% 
+  mutate(colData = map(data, ~ .x %>% 
+                         distinct(evolved) %>% 
+                         mutate(evolved = factor(evolved, levels = c("ancestor","evolved"))) %>%
+                         column_to_rownames(var = "evolved"))) %>% 
+  mutate(dds = map2(.x = matrix, .y = colData,
+                    ~ DESeqDataSetFromMatrix(countData = .x,
+                                             colData = .y,
+                                             design = ~ 1))) %>% 
+  mutate(dds = map(dds, estimateSizeFactors)) %>% 
+  mutate(norm_counts = map(dds, ~ counts(.x, normalized = TRUE))) %>% 
+  mutate(log2FC = map(norm_counts, ~ log2(.x[, "evolved"] + 1) - log2(.x[, "ancestor"] + 1))) %>% 
+  mutate(results = map2(norm_counts, log2FC,
+                        ~ tibble(GeneID = rownames(.x),
+                                 log2FC = as.numeric(.y),
+                                 mean_norm_expr = rowMeans(.x)))) 
+
+
+LOGFC_TABLE <- LOGFOLD %>%
+  select(strain, rhamnose, results) %>%
+  unnest(results)
+```
+
+
+```{r}
+LOGFC_TABLE <- LOGFC_TABLE %>%
+  mutate(
+    is_sigma54_ebp       = GeneID %in% sigma54_ebp_genes,
+    is_sigma54_predicted = GeneID %in% sigma54_promoter_genes,
+    is_sigma54_validated = GeneID %in% sigma54_validated_genes
+  ) 
+
+LOGFC_TABLE %>%
+  summarise(
+    ebp = sum(is_sigma54_ebp),
+    predicted = sum(is_sigma54_predicted),
+    validated = sum(is_sigma54_validated),
+  )
+```
+
+# Do we see a general pattern of upregulation across σ54-EBP controlled genes after a rewiring event?
+
+```{r}
+
+density_plot <- ggplot(
+  LOGFC_TABLE,
+  aes(x = log2FC,
+      fill = is_sigma54_predicted,
+      color = is_sigma54_predicted)
+) +
+  geom_density(alpha = 0.35, linewidth = 0.8) +
+  facet_grid(rhamnose ~ strain) +
+  scale_fill_manual(
+    values = c("grey70", "red"),
+    labels = c("Other genes", "σ54 predicted targets"),
+    name = NULL
+  ) +
+  scale_color_manual(
+    values = c("grey50", "red"),
+    labels = c("Other genes", "σ54 predicted targets"),
+    name = NULL
+  ) +
+  theme_classic(base_size = 13) +
+  labs(
+    x = "log2 Fold Change (Evolved − Ancestor)",
+    y = "Density",
+    title = "Distribution of Expression Shifts Across σ54 Targets"
+  )
+
+violin_plot <- ggplot(
+  LOGFC_TABLE,
+  aes(x = is_sigma54_predicted,
+      y = log2FC,
+      fill = is_sigma54_predicted)
+) +
+  geom_violin(trim = FALSE, alpha = 0.5) +
+  geom_boxplot(width = 0.12, outlier.size = 0.3, alpha = 0.8) +
+  facet_grid(rhamnose ~ strain) +
+  scale_fill_manual(
+    values = c("grey70", "red"),
+    labels = c("Other genes", "σ54 predicted targets"),
+    name = NULL
+  ) +
+  theme_classic(base_size = 13) +
+  labs(
+    x = "",
+    y = "log2 Fold Change",
+    title = "σ54 Targets Show Systematic Expression Shifts After Rewiring"
+  ) +
+  theme(
+    axis.text.x = element_text(size = 11),
+    strip.text = element_text(size = 12)
+  )
+
+LOGFC_TABLE <- LOGFC_TABLE %>%
+  mutate(
+    s54_category = case_when(
+      is_sigma54_ebp ~ "σ54 EBP",
+      is_sigma54_predicted & is_sigma54_validated ~ "Predicted + Validated",
+      is_sigma54_predicted & !is_sigma54_validated ~ "Predicted only",
+      !is_sigma54_predicted & is_sigma54_validated ~ "Validated only",
+      TRUE ~ "Other genes"
+    )
+  )
+
+
+ma_plot <- ggplot(
+  LOGFC_TABLE,
+  aes(x = log10(mean_norm_expr + 1),
+      y = log2FC,
+      color = s54_category)
+) +
+  geom_point(alpha = 0.5, size = 0.7) +
+  facet_grid(rhamnose ~ strain) +
+  scale_color_manual(
+    values = c(
+      "Other genes" = "grey80",
+      "σ54 EBP" = "green",
+      "Predicted + Validated" = "purple",
+      "Predicted only" = "red",
+      "Validated only" = "blue"
+    )
+  ) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  theme_classic(base_size = 13) +
+  labs(
+    x = "log10(mean normalized expression + 1)",
+    y = "log2 Fold Change (Evolved − Ancestor)",
+    color = NULL,
+    title = "MA Plot Highlighting σ54 Regulatory Classes"
+  )
+
+
+ggsave("results/s54_MA.png", ma_plot, width = 10, height = 6, dpi = 300)
+
+
+ggsave(
+  "results/density_plot.pdf",
+  density_plot,
+  width = 12,
+  height = 10
+)
+ggsave(
+  "results/violin_plot.pdf",
+  violin_plot,
+  width = 12,
+  height = 10
+)
+
+wilcox_table <- LOGFC_TABLE %>%
+  mutate(
+    is_sigma54_predval =
+      is_sigma54_predicted | is_sigma54_validated
+  )
+
+wilcox_results <- wilcox_table %>%
+  group_by(strain, rhamnose) %>%
+  summarise(
+    p_value = wilcox.test(log2FC ~ is_sigma54_predval)$p.value,
+    median_sigma = median(log2FC[is_sigma54_predval], na.rm = TRUE),
+    median_other = median(log2FC[!is_sigma54_predval], na.rm = TRUE),
+    .groups = "drop"
+  )
+
+wilcox_results <- wilcox_results %>%
+  mutate(
+    delta = median_sigma - median_other,
+    .after = p_value
+  )
+
+write_csv(
+  wilcox_results,
+  "results/wilcox_results.csv"
+)
+wilcox_results
+
+```
+
+
+```{r ma_plots_individual, fig.width=7, fig.height=5, message=FALSE, warning=FALSE}
+# install.packages("ggrepel")
+library(ggrepel)
+
+dir.create("results/ma_individual_labeled", showWarnings = FALSE, recursive = TRUE)
+
+make_ma_single_top_labels <- function(df_panel, n_each = 5) {
+
+  df_panel <- df_panel %>%
+    mutate(
+      x_plot = log10(mean_norm_expr + 1),
+      y_plot = log2FC,
+      abs_y  = abs(y_plot)
+    )
+
+  top_ebp <- df_panel %>%
+    filter(s54_category == "σ54 EBP") %>%
+    arrange(desc(abs_y)) %>%
+    slice_head(n = n_each)
+
+  target_classes <- c("Predicted + Validated", "Predicted only", "Validated only")
+
+  top_targets <- df_panel %>%
+    filter(s54_category %in% target_classes) %>%
+    arrange(desc(abs_y)) %>%
+    slice_head(n = n_each)
+
+  labels_df <- bind_rows(top_ebp, top_targets) %>%
+    distinct(GeneID, .keep_all = TRUE)
+
+  p <- ggplot(df_panel, aes(x = x_plot, y = y_plot, color = s54_category)) +
+    geom_point(alpha = 0.55, size = 0.8) +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    scale_color_manual(values = c(
+      "Other genes" = "grey80",
+      "σ54 EBP" = "darkgreen",
+      "Predicted + Validated" = "purple",
+      "Predicted only" = "red",
+      "Validated only" = "blue"
+    )) +
+    ggrepel::geom_text_repel(
+      data = labels_df,
+      aes(label = GeneID),
+      size = 3,
+      max.overlaps = Inf,
+      box.padding = 0.35,
+      min.segment.length = 0
+    ) +
+    theme_classic(base_size = 13) +
+    labs(
+      x = "log10(mean normalized expression + 1)",
+      y = "log2 Fold Change (Evolved − Ancestor)",
+      color = NULL,
+      title = paste0("MA Plot: ", df_panel$strain[1], " — ", df_panel$rhamnose[1]),
+      subtitle = paste0("Labels: top ", n_each, " EBPs + top ", n_each, " σ54 targets (by |log2FC|)")
+    )
+
+  p
+}
+
+panel_list <- LOGFC_TABLE %>%
+  mutate(
+    strain   = factor(strain, levels = c("0286","2209","2630","4895")),
+    rhamnose = factor(rhamnose, levels = c("NoRha","Rha"))
+  ) %>%
+  group_by(strain, rhamnose) %>%
+  group_split(.keep = TRUE)
+
+panel_names <- purrr::map_chr(panel_list, ~ paste0(.x$strain[1], "_", .x$rhamnose[1]))
+names(panel_list) <- panel_names
+
+purrr::walk2(panel_list, names(panel_list), function(df_panel, nm) {
+  p <- make_ma_single_top_labels(df_panel, n_each = 5)
+  print(p)
+  ggsave(
+    filename = file.path("results/ma_individual_labeled", paste0("MA_", nm, "_toplabels.png")),
+    plot = p,
+    width = 7,
+    height = 5,
+    dpi = 300
+  )
+})
+
+
+```
+
+
+
+
+```{r}
+write.csv(
+  LOGFC_TABLE,
+  file = "results/LOGFC_TABLE.csv",
+  row.names = FALSE
+)
+
+```
+
+
+
+```{r}
+
+
+LOGFC_TABLE_filtered <- LOGFC_TABLE %>%
+  filter(is_sigma54_ebp == TRUE | is_sigma54_ebp == "True")
+
+LOGFC_TABLE_filtered <- LOGFC_TABLE_filtered %>%
+  mutate(strainRha = paste0(strain, rhamnose))
+
+
+LOGFC_TABLE_wide <- LOGFC_TABLE_filtered %>%
+  select(GeneID, strainRha, log2FC) %>%
+  pivot_wider(
+    names_from = strainRha,
+    values_from = log2FC
+  ) %>%
+  arrange(GeneID)
+
+write.csv(
+  LOGFC_TABLE_wide,
+  file = "results/EBP_TABLE.csv",
+  row.names = FALSE
+)
+
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(ggplot2)
+
+delta_df <- LOGFC_TABLE_wide %>%
+  pivot_longer(-GeneID, names_to = "strainRha", values_to = "log2FC") %>%
+  mutate(
+    strain = str_extract(strainRha, "^[0-9]+"),
+    rha = str_replace(strainRha, "^[0-9]+", "")
+  ) %>%
+  select(GeneID, strain, rha, log2FC) %>%
+  pivot_wider(names_from = rha, values_from = log2FC) %>%
+  mutate(delta = Rha - NoRha)
+
+ggplot(delta_df, aes(x = strain, y = delta)) +
+  geom_hline(yintercept = 0, linetype = 2) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(width = 0.15, alpha = 0.6) +
+  theme_bw() +
+  labs(title = "Rhamnose effect on σ54 EBPs (Δlog2FC = Rha − NoRha)",
+       y = "Δlog2FC", x = "Strain")
+
+```
+
+```{r}
+library(pheatmap)
+
+mat <- LOGFC_TABLE_wide %>%
+  column_to_rownames("GeneID") %>%
+  as.matrix()
+
+mat_z <- t(scale(t(mat)))
+
+pheatmap(
+  mat_z,
+  cluster_rows = FALSE,
+  cluster_cols = FALSE,
+  na_col = "grey90",
+  main = "σ54 EBP log2FC (row-scaled)"
+)
+```
+```{r}
+delta_mat <- delta_df %>%
+  select(GeneID, strain, delta) %>%
+  pivot_wider(names_from = strain, values_from = delta) %>%
+  column_to_rownames("GeneID") %>%
+  as.matrix()
+
+pheatmap(
+  delta_mat,
+  cluster_rows = TRUE,
+  cluster_cols = TRUE,
+  main = "Δlog2FC (Rha − NoRha) for σ54 EBPs"
+)
+```
+
+```{r}
+LOGFC_TABLE_filtered %>%
+  filter(GeneID == "PFLU_5143") %>%
+  ggplot(aes(x = rhamnose, y = log2FC, group = strain, color = strain)) +
+  geom_point(size = 3) +
+  geom_line() +
+  theme_bw()
+
+```
+
