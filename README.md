@@ -20,3 +20,6 @@ FGSEA and STRING expanded FGSEA (Figure 3a).
 ### 7.Variant Calling
 
 Alignment and variant calling. Input WGS reads available on SRA at BioProject ID: PRJNA992893.
+
+### 8.Variant Calling Analysis
+Cluster mutations and create binary heatmap (Figure 4)
