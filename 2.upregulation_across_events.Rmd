@@ -1,0 +1,502 @@
+---
+title: "2.upregulation_across_events"
+author: "Griffin Kramer"
+date: "2026-02-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(readr)
+library(dplyr)
+library(tibble)
+library(tidyr)
+library(stringr)
+library(ggplot2)
+library(UpSetR)
+library(patchwork)
+```
+
+```{r}
+logfc_tbl <- read_csv("results/LOGFC_TABLE.csv", show_col_types = FALSE)
+
+
+RHAMNOSE_KEEP <- "NoRha"
+STRAINS_KEEP <- c("0286", "2209", "2630", "4895")
+LFC_CUTOFF <- 0.5
+
+sigma_df <- logfc_tbl %>%
+  mutate(
+    strain   = as.character(strain),
+    rhamnose = as.character(rhamnose),
+    GeneID   = as.character(GeneID),
+    log2FC   = as.numeric(log2FC),
+
+    is_sigma54_controlled = is_sigma54_ebp | is_sigma54_predicted | is_sigma54_validated,
+
+    Info = case_when(
+      is_sigma54_ebp ~ "EBP",
+      (is_sigma54_predicted | is_sigma54_validated) ~ "Sigma54 target",
+      TRUE ~ "Other"
+    ),
+
+    direction = case_when(
+      LFC_CUTOFF == 0 & log2FC > 0 ~ "Up",
+      LFC_CUTOFF == 0 & log2FC < 0 ~ "Down",
+      LFC_CUTOFF >  0 & log2FC >=  LFC_CUTOFF ~ "Up",
+      LFC_CUTOFF >  0 & log2FC <= -LFC_CUTOFF ~ "Down",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  filter(
+    strain %in% STRAINS_KEEP,
+    rhamnose == RHAMNOSE_KEEP,
+    is_sigma54_controlled,
+    !is.na(direction)
+  ) %>%
+  select(GeneID, strain, log2FC, direction, Info) %>%
+  mutate(strain = if_else(strain == "286", "0286", strain))  
+
+
+merged <- sigma_df %>%
+  group_by(GeneID, direction) %>%
+  summarise(
+    avg_log2FC    = mean(log2FC, na.rm = TRUE),
+    count_strains = n_distinct(strain),
+
+    Info = case_when(
+      any(Info == "EBP") ~ "EBP",
+      any(Info == "Sigma54 target") ~ "Sigma54 target",
+      TRUE ~ "Other"
+    ),
+
+    strains = paste(sort(unique(strain)), collapse = ", "),
+    .groups = "drop"
+  ) %>%
+  arrange(desc(count_strains), desc(abs(avg_log2FC)))
+
+write_csv(
+  merged,
+  paste0("merged_sigma54_effectsize_4strains_", RHAMNOSE_KEEP, "_LFC", LFC_CUTOFF, ".csv")
+)
+
+```
+
+```{r}
+
+recurrence_plot_df <- merged %>%
+  filter(direction == "Up",
+         Info %in% c("EBP", "Sigma54 target")) %>%
+  count(count_strains) %>%
+  complete(count_strains = 1:4, fill = list(n = 0))
+
+recurrence_plot <- ggplot(recurrence_plot_df,
+                          aes(x = factor(count_strains), y = n)) +
+  geom_col(width = 0.7, fill = "skyblue", color = "black") +
+  theme_classic(base_size = 14) +
+  labs(
+    x = "# of strains gene is Up in",
+    y = "# of sigma 54-controlled genes",
+    title = "Recurrence of σ54-controlled gene upregulation across evolved strains"
+  )
+
+ggsave("results/recurrence_plot.pdf", recurrence_plot, width = 12, height = 10)
+recurrence_plot
+
+```
+
+```{r}
+
+
+up_genes_by_strain <- sigma_df %>%
+  filter(direction == "Up") %>%
+  distinct(GeneID, strain)
+
+up_mat <- up_genes_by_strain %>%
+  mutate(present = 1L) %>%
+  pivot_wider(names_from = strain, values_from = present, values_fill = 0L)
+
+
+for (s in STRAINS_KEEP) {
+  if (!s %in% names(up_mat)) up_mat[[s]] <- 0L
+}
+
+
+up_df <- as.data.frame(up_mat)
+up_df[STRAINS_KEEP] <- lapply(up_df[STRAINS_KEEP], function(x) as.integer(x))
+
+png("results/upset_sigma54_controlled_up_NoRha.png", width = 9, height = 5, units = "in", res = 300)
+UpSetR::upset(
+  up_df,
+  sets = STRAINS_KEEP,
+  order.by = "freq",
+  mainbar.y.label = "Intersection size",
+  sets.x.label = "Upregulated genes per strain"
+)
+dev.off()
+
+```
+
+```{r}
+logfc_tbl <- read_csv("results/LOGFC_TABLE.csv", show_col_types = FALSE)
+
+RHAMNOSE_KEEP <- "Rha"
+
+STRAINS_KEEP <- c("0286", "2209", "2630", "4895")
+
+
+LFC_CUTOFF <- 0.5
+
+sigma_df <- logfc_tbl %>%
+  mutate(
+    strain   = as.character(strain),
+    rhamnose = as.character(rhamnose),
+    GeneID   = as.character(GeneID),
+    log2FC   = as.numeric(log2FC),
+
+    is_sigma54_controlled = is_sigma54_ebp | is_sigma54_predicted | is_sigma54_validated,
+
+    Info = case_when(
+      is_sigma54_ebp ~ "EBP",
+      (is_sigma54_predicted | is_sigma54_validated) ~ "Sigma54 target",
+      TRUE ~ "Other"
+    ),
+
+    direction = case_when(
+      LFC_CUTOFF == 0 & log2FC > 0 ~ "Up",
+      LFC_CUTOFF == 0 & log2FC < 0 ~ "Down",
+      LFC_CUTOFF >  0 & log2FC >=  LFC_CUTOFF ~ "Up",
+      LFC_CUTOFF >  0 & log2FC <= -LFC_CUTOFF ~ "Down",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  filter(
+    strain %in% STRAINS_KEEP,
+    rhamnose == RHAMNOSE_KEEP,
+    is_sigma54_controlled,
+    !is.na(direction)
+  ) %>%
+  select(GeneID, strain, log2FC, direction, Info) %>%
+  mutate(strain = if_else(strain == "286", "0286", strain))  # just in case
+
+
+up_genes_by_strain <- sigma_df %>%
+  filter(direction == "Up") %>%
+  distinct(GeneID, strain)
+
+up_mat <- up_genes_by_strain %>%
+  mutate(present = 1L) %>%
+  pivot_wider(names_from = strain, values_from = present, values_fill = 0L)
+
+for (s in STRAINS_KEEP) {
+  if (!s %in% names(up_mat)) up_mat[[s]] <- 0L
+}
+
+up_df <- as.data.frame(up_mat)
+up_df[STRAINS_KEEP] <- lapply(up_df[STRAINS_KEEP], function(x) as.integer(x))
+
+png("results/upset_sigma54_controlled_up_Rha.png", width = 9, height = 5, units = "in", res = 300)
+UpSetR::upset(
+  up_df,
+  sets = STRAINS_KEEP,
+  order.by = "freq",
+  mainbar.y.label = "Intersection size",
+  sets.x.label = "Upregulated genes per strain"
+)
+```
+
+
+
+```{r}
+
+RHAMNOSE_KEEP <- "Rha"
+
+df_all_for_cor <- logfc_tbl %>%
+  mutate(
+    strain   = as.character(strain),
+    rhamnose = as.character(rhamnose),
+    GeneID   = as.character(GeneID),
+    log2FC   = as.numeric(log2FC),
+    is_sigma54_controlled = is_sigma54_ebp | is_sigma54_predicted | is_sigma54_validated
+  ) %>%
+  filter(
+    strain %in% STRAINS_KEEP,
+    rhamnose == RHAMNOSE_KEEP,
+    is_sigma54_controlled
+  ) %>%
+  select(GeneID, strain, log2FC)
+
+fc_wide <- df_all_for_cor %>%
+  pivot_wider(names_from = strain, values_from = log2FC)
+
+plot_pair <- function(wide_df, s1, s2) {
+  dat <- wide_df %>%
+    select(all_of(c(s1, s2))) %>%
+    drop_na()
+
+  ct <- cor.test(dat[[s1]], dat[[s2]], method = "spearman")
+
+  ggplot(dat, aes(x = .data[[s1]], y = .data[[s2]])) +
+    geom_point(alpha = 0.25) +
+    theme_classic(base_size = 12) +
+    labs(
+      title = paste0(s1, " vs ", s2),
+      subtitle = paste0("Spearman ρ = ", round(unname(ct$estimate), 2),
+                        ", p = ", signif(ct$p.value, 2)),
+      x = paste0("log2FC ", s1),
+      y = paste0("log2FC ", s2)
+    )
+}
+
+pairs <- combn(STRAINS_KEEP, 2, simplify = FALSE)
+pair_plots <- lapply(pairs, function(p) plot_pair(fc_wide, p[1], p[2]))
+
+corr_grid <- wrap_plots(pair_plots, ncol = 3) +
+  plot_annotation(
+    title = paste0("Pairwise log2FC correlations (σ54-controlled genes, ", RHAMNOSE_KEEP, ")")
+  )
+
+ggsave("results/log2fc_pairwise_correlations_sigma54_controlled_Rha.png",
+       corr_grid, width = 12, height = 7, dpi = 300)
+
+corr_grid
+
+```
+
+```{r}
+
+RHAMNOSE_KEEP <- "NoRha"
+
+df_all_for_cor <- logfc_tbl %>%
+  mutate(
+    strain   = as.character(strain),
+    rhamnose = as.character(rhamnose),
+    GeneID   = as.character(GeneID),
+    log2FC   = as.numeric(log2FC),
+    is_sigma54_controlled = is_sigma54_ebp | is_sigma54_predicted | is_sigma54_validated
+  ) %>%
+  filter(
+    strain %in% STRAINS_KEEP,
+    rhamnose == RHAMNOSE_KEEP,
+    is_sigma54_controlled
+  ) %>%
+  select(GeneID, strain, log2FC)
+
+fc_wide <- df_all_for_cor %>%
+  pivot_wider(names_from = strain, values_from = log2FC)
+
+plot_pair <- function(wide_df, s1, s2) {
+  dat <- wide_df %>%
+    select(all_of(c(s1, s2))) %>%
+    drop_na()
+
+  ct <- cor.test(dat[[s1]], dat[[s2]], method = "spearman")
+
+  ggplot(dat, aes(x = .data[[s1]], y = .data[[s2]])) +
+    geom_point(alpha = 0.25) +
+    theme_classic(base_size = 12) +
+    labs(
+      title = paste0(s1, " vs ", s2),
+      subtitle = paste0("Spearman ρ = ", round(unname(ct$estimate), 2),
+                        ", p = ", signif(ct$p.value, 2)),
+      x = paste0("log2FC ", s1),
+      y = paste0("log2FC ", s2)
+    )
+}
+
+pairs <- combn(STRAINS_KEEP, 2, simplify = FALSE)
+pair_plots <- lapply(pairs, function(p) plot_pair(fc_wide, p[1], p[2]))
+
+corr_grid <- wrap_plots(pair_plots, ncol = 3) +
+  plot_annotation(
+    title = paste0("Pairwise log2FC correlations (σ54-controlled genes, ", RHAMNOSE_KEEP, ")")
+  )
+
+ggsave("results/log2fc_pairwise_correlations_sigma54_controlled_NoRha.png",
+       corr_grid, width = 12, height = 7, dpi = 300)
+
+corr_grid
+```
+
+```{r}
+
+
+STRAINS_KEEP_2 <- c("4895", "2209")
+RHAMNOSE_KEEP_2 <- c("Rha", "NoRha")
+LFC_CUTOFF <- 0.5  
+
+sigma_up_4895_2209 <- logfc_tbl %>%
+  mutate(
+    strain   = as.character(strain),
+    rhamnose = as.character(rhamnose),
+    GeneID   = as.character(GeneID),
+    log2FC   = as.numeric(log2FC),
+
+    strain = if_else(strain == "286", "0286", strain),
+
+    is_sigma54_controlled = is_sigma54_ebp | is_sigma54_predicted | is_sigma54_validated,
+
+    direction = case_when(
+      LFC_CUTOFF == 0 & log2FC > 0 ~ "Up",
+      LFC_CUTOFF == 0 & log2FC < 0 ~ "Down",
+      LFC_CUTOFF >  0 & log2FC >=  LFC_CUTOFF ~ "Up",
+      LFC_CUTOFF >  0 & log2FC <= -LFC_CUTOFF ~ "Down",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  filter(
+    strain %in% STRAINS_KEEP_2,
+    rhamnose %in% RHAMNOSE_KEEP_2,
+    is_sigma54_controlled,
+    direction == "Up"
+  ) %>%
+  distinct(GeneID, strain, rhamnose) %>%
+  mutate(set = paste(strain, rhamnose, sep = "_"))
+
+gene_sets <- sigma_up_4895_2209 %>%
+  group_by(set) %>%
+  summarise(genes = list(unique(GeneID)), .groups = "drop") %>%
+  tibble::deframe()
+
+SETS_4 <- c("4895_Rha", "4895_NoRha", "2209_Rha", "2209_NoRha")
+for (s in SETS_4) if (!s %in% names(gene_sets)) gene_sets[[s]] <- character(0)
+
+up_mat_4 <- UpSetR::fromList(gene_sets)
+
+png("results/upset_sigma54_up_4895_2209_Rha_vs_NoRha.png", width = 10, height = 5, units = "in", res = 300)
+UpSetR::upset(
+  up_mat_4,
+  sets = SETS_4,
+  order.by = "freq",
+  mainbar.y.label = "Intersection size",
+  sets.x.label = "Upregulated genes (σ54-controlled)"
+)
+dev.off()
+```
+
+```{r}
+fisher_overlap <- function(setA, setB, background = 6000){
+
+  overlap <- length(intersect(setA, setB))
+  onlyA <- length(setdiff(setA, setB))
+  onlyB <- length(setdiff(setB, setA))
+  neither <- background - overlap - onlyA - onlyB
+
+  mat <- matrix(
+    c(overlap, onlyA,
+      onlyB, neither),
+    nrow = 2
+  )
+
+  fisher.test(mat)
+}
+
+genes_4895_Rha   <- gene_sets[["4895_Rha"]]
+genes_4895_NoRha <- gene_sets[["4895_NoRha"]]
+
+genes_2209_Rha   <- gene_sets[["2209_Rha"]]
+genes_2209_NoRha <- gene_sets[["2209_NoRha"]]
+
+fisher_overlap(genes_4895_Rha, genes_4895_NoRha)
+fisher_overlap(genes_2209_Rha, genes_2209_NoRha)
+```
+
+```{r}
+
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(UpSetR)
+
+STRAINS_INDUCIBLE <- c("0286", "2630")
+RHAS <- c("Rha", "NoRha")
+LFC_CUTOFF <- 0.5 
+
+
+sigma_up_0286_2630 <- logfc_tbl %>%
+  mutate(
+    strain   = as.character(strain),
+    rhamnose = as.character(rhamnose),
+    GeneID   = as.character(GeneID),
+    log2FC   = as.numeric(log2FC),
+    strain   = if_else(strain == "286", "0286", strain),
+
+    is_sigma54_controlled = is_sigma54_ebp | is_sigma54_predicted | is_sigma54_validated,
+
+    direction = case_when(
+      LFC_CUTOFF == 0 & log2FC > 0 ~ "Up",
+      LFC_CUTOFF == 0 & log2FC < 0 ~ "Down",
+      LFC_CUTOFF >  0 & log2FC >=  LFC_CUTOFF ~ "Up",
+      LFC_CUTOFF >  0 & log2FC <= -LFC_CUTOFF ~ "Down",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  filter(
+    strain %in% STRAINS_INDUCIBLE,
+    rhamnose %in% RHAS,
+    is_sigma54_controlled,
+    direction == "Up"
+  ) %>%
+  distinct(strain, rhamnose, GeneID)
+
+
+rha_only_sets <- sigma_up_0286_2630 %>%
+  group_by(strain) %>%
+  summarise(
+    genes_rha   = list(unique(GeneID[rhamnose == "Rha"])),
+    genes_norha = list(unique(GeneID[rhamnose == "NoRha"])),
+    genes_rha_only = list(setdiff(genes_rha[[1]], genes_norha[[1]])),
+    .groups = "drop"
+  ) %>%
+  transmute(
+    set = paste0(strain, "_RhaOnly"),
+    genes = genes_rha_only
+  ) %>%
+  deframe()
+
+SETS_2 <- c("0286_RhaOnly", "2630_RhaOnly")
+for (s in SETS_2) if (!s %in% names(rha_only_sets)) rha_only_sets[[s]] <- character(0)
+
+up_mat_ind <- UpSetR::fromList(rha_only_sets)
+
+png("results/upset_sigma54_up_RhaOnly_0286_2630.png", width = 8, height = 4.5, units = "in", res = 300)
+UpSetR::upset(
+  up_mat_ind,
+  sets = SETS_2,
+  order.by = "freq",
+  mainbar.y.label = "Intersection size",
+  sets.x.label = "Rha-only Up genes (σ54-controlled)"
+)
+dev.off()
+
+
+
+fisher_overlap <- function(setA, setB, background_universe){
+  U <- unique(background_universe)
+  overlap <- length(intersect(setA, setB))
+  onlyA   <- length(setdiff(setA, setB))
+  onlyB   <- length(setdiff(setB, setA))
+  neither <- length(U) - overlap - onlyA - onlyB
+
+  mat <- matrix(c(overlap, onlyA, onlyB, neither), nrow = 2, byrow = TRUE)
+  fisher.test(mat)
+}
+
+genes_0286_rhaonly <- rha_only_sets[["0286_RhaOnly"]]
+genes_2630_rhaonly <- rha_only_sets[["2630_RhaOnly"]]
+
+background_genes <- logfc_tbl %>%
+  mutate(
+    strain   = as.character(strain),
+    rhamnose = as.character(rhamnose),
+    GeneID   = as.character(GeneID),
+    strain   = if_else(strain == "286", "0286", strain),
+    is_sigma54_controlled = is_sigma54_ebp | is_sigma54_predicted | is_sigma54_validated
+  ) %>%
+  filter(strain %in% STRAINS_INDUCIBLE, rhamnose %in% RHAS, is_sigma54_controlled) %>%
+  distinct(GeneID) %>%
+  pull(GeneID)
+
+fisher_overlap(genes_0286_rhaonly, genes_2630_rhaonly, background_genes)
+```
+
