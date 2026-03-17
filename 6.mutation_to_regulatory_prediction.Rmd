@@ -1,0 +1,357 @@
+---
+title: "6.mutation_to_regulatory_prediction"
+author: "Griffin Kramer"
+date: "2026-02-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(fgsea)
+library(ggplot2)
+library(tibble)
+```
+
+```{r}
+
+logfc <- read.csv("results/LOGFC_TABLE.csv", stringsAsFactors = FALSE)
+
+strain_col <- "strain"
+RHA_col    <- "rhamnose"          
+gene_col   <- "GeneID"
+l2fc_col   <- "log2FC"
+s54_col    <- "is_sigma54_validated"
+
+stopifnot(all(c(strain_col, RHA_col, gene_col, l2fc_col, s54_col) %in% names(logfc)))
+
+run_routes_one_group <- function(df, strain_name, RHA_name) {
+  ranks <- df[[l2fc_col]]
+  names(ranks) <- df[[gene_col]]
+  ranks <- ranks[is.finite(ranks)]
+  ranks <- sort(ranks, decreasing = TRUE)
+
+
+  sigma54_targets <- unique(df[[gene_col]][df[[s54_col]] %in% TRUE])
+
+  route_sets <- list(
+    PFLU1132_pathway      = c("PFLU_1130","PFLU_1131","PFLU_1132"),
+    Glycine_cleavage      = c("PFLU_4897","PFLU_4899"),
+    Pyrimidine_Aspartate  = c("PFLU_5758","PFLU_5759","PFLU_1851"),
+    Anti_sigma_system     = c("PFLU_1583","PFLU_1584"),
+    NO_reductase          = c("PFLU_5141", "PFLU_5142", "PFLU_5143"),
+    Sigma54_targets       = sigma54_targets
+  )
+
+  route_sets2 <- lapply(route_sets, \(x) intersect(x, names(ranks)))
+  set_sizes   <- sapply(route_sets2, length)
+
+  fg <- fgseaMultilevel(
+    pathways = route_sets2,
+    stats = ranks,
+    minSize = 2,
+    maxSize = 5000
+  ) %>%
+    mutate(
+      strain = strain_name,
+      RHA = RHA_name,
+      set_size_in_data = set_sizes[pathway]
+    ) %>%
+    arrange(padj)
+
+  fg
+}
+
+
+groups <- logfc %>%
+  distinct(.data[[strain_col]], .data[[RHA_col]]) %>%
+  arrange(.data[[strain_col]], .data[[RHA_col]])
+
+fg_route_all <- bind_rows(lapply(seq_len(nrow(groups)), function(i) {
+  s <- groups[[strain_col]][i]
+  e <- groups[[RHA_col]][i]
+  df_se <- logfc %>% filter(.data[[strain_col]] == s, .data[[RHA_col]] == e)
+  run_routes_one_group(df_se, s, e)
+}))
+
+
+fg_route_all %>%
+  select(strain, RHA, pathway, NES, padj, size, set_size_in_data) %>%
+  arrange(strain, RHA, padj)
+
+```
+
+```{r}
+compare_nes <- fg_route_all %>%
+  select(strain, RHA, pathway, NES, padj) %>%
+  tidyr::pivot_wider(
+    names_from = RHA,
+    values_from = c(NES, padj)
+  )
+
+compare_nes
+
+write.csv(
+  compare_nes,
+  "mutations_fgsea/compare_NES_table.csv",
+  row.names = FALSE
+)
+
+```
+```{r}
+
+p <- ggplot(fg_route_all, aes(x = pathway, y = NES)) +
+  geom_col() +
+  facet_grid(RHA ~ strain) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+p
+
+ggsave(
+  filename = "mutations_fgsea/Route_GSEA_NES_plot.png",
+  plot = p,
+  width = 10,
+  height = 6,
+  dpi = 300
+)
+
+```
+
+```{r}
+
+SPECIES_ID <- 294
+CALLER_ID  <- "griffin_kramer"
+BATCH_SIZE <- 200
+
+STRING_LINKS_PATH <- "string/294.protein.links.v12.0.txt"
+STRING_SCORE_MIN  <- 600          
+MAX_NEIGHBORS_PER_SEED <- 80      
+
+CACHE_DIR <- "string/cache"
+dir.create(CACHE_DIR, showWarnings = FALSE, recursive = TRUE)
+
+library(httr)
+library(readr)
+library(stringr)
+
+string_map_ids <- function(ids, species = SPECIES_ID, caller_identity = CALLER_ID) {
+  base <- "https://version-12-0.string-db.org/api"
+  url  <- paste(base, "tsv", "get_string_ids", sep = "/")
+  ids_payload <- paste(ids, collapse = "\r")
+
+  resp <- POST(url, body = list(
+    identifiers = ids_payload,
+    species = species,
+    limit = 1,
+    echo_query = 1,
+    caller_identity = caller_identity
+  ), encode = "form")
+
+  stop_for_status(resp)
+  txt <- content(resp, as = "text", encoding = "UTF-8")
+  read_tsv(txt, show_col_types = FALSE)
+}
+
+map_with_cache <- function(gene_ids, cache_path) {
+  if (file.exists(cache_path)) {
+    message("Using cached STRING mapping: ", cache_path)
+    return(read_tsv(cache_path, show_col_types = FALSE))
+  }
+
+  message("Mapping via STRING API (will cache): ", cache_path)
+  batches <- split(gene_ids, ceiling(seq_along(gene_ids) / BATCH_SIZE))
+  mapped_list <- vector("list", length(batches))
+
+  for (i in seq_along(batches)) {
+    mapped_list[[i]] <- string_map_ids(batches[[i]])
+    Sys.sleep(1)
+  }
+
+  mapped <- bind_rows(mapped_list) %>%
+    rename(
+      query = queryItem,
+      string_protein_id = stringId
+    ) %>%
+    select(query, string_protein_id, preferredName, annotation, ncbiTaxonId, taxonName)
+
+  write_tsv(mapped, cache_path)
+  mapped
+}
+```
+
+
+
+```{r}
+
+load_string_edges <- function(path = STRING_LINKS_PATH) {
+  edges <- read.table(path, header = TRUE, sep = "", comment.char = "")
+  names(edges) <- gsub("^#", "", names(edges))
+  names(edges)[1:3] <- c("protein1", "protein2", "combined_score")
+  edges
+}
+
+string_edges <- load_string_edges(STRING_LINKS_PATH)
+
+expand_geneset_string <- function(seed_genes,
+                                 ranks_genes,
+                                 map_tbl,
+                                 edges_tbl,
+                                 score_min = STRING_SCORE_MIN,
+                                 max_neighbors_per_seed = MAX_NEIGHBORS_PER_SEED) {
+
+  seed_map <- map_tbl %>%
+    filter(toupper(query) %in% toupper(seed_genes)) %>%
+    filter(!is.na(string_protein_id), string_protein_id != "") %>%
+    distinct(string_protein_id)
+
+  if (nrow(seed_map) == 0) {
+    return(intersect(seed_genes, ranks_genes)) 
+  }
+
+  seed_ids <- seed_map$string_protein_id
+
+  neigh_edges <- edges_tbl %>%
+    filter(combined_score >= score_min) %>%
+    filter(protein1 %in% seed_ids | protein2 %in% seed_ids) %>%
+    mutate(neighbor = ifelse(protein1 %in% seed_ids, protein2, protein1)) %>%
+    group_by(neighbor) %>%
+    summarise(best_score = max(combined_score), .groups = "drop") %>%
+    arrange(desc(best_score)) %>%
+    slice_head(n = max_neighbors_per_seed)
+
+  neighbor_ids <- neigh_edges$neighbor
+
+  back_map <- map_tbl %>%
+    filter(string_protein_id %in% c(seed_ids, neighbor_ids)) %>%
+    transmute(gene = toupper(query)) %>%
+    distinct()
+
+  expanded <- unique(c(toupper(seed_genes), back_map$gene))
+
+  intersect(expanded, ranks_genes)
+}
+```
+
+```{r}
+logfc <- read.csv("results/LOGFC_TABLE.csv", stringsAsFactors = FALSE)
+
+strain_col <- "strain"
+RHA_col    <- "rhamnose"          
+gene_col   <- "GeneID"
+l2fc_col   <- "log2FC"
+s54_col    <- "is_sigma54_validated"
+
+stopifnot(all(c(strain_col, RHA_col, gene_col, l2fc_col, s54_col) %in% names(logfc)))
+
+run_routes_one_group <- function(df, strain_name, RHA_name) {
+
+  ranks <- df[[l2fc_col]]
+  names(ranks) <- df[[gene_col]]
+  ranks <- ranks[is.finite(ranks)]
+  ranks <- sort(ranks, decreasing = TRUE)
+  rank_genes <- toupper(names(ranks))
+  cache_path <- file.path(CACHE_DIR, paste0("mapped_", strain_name, "_", RHA_name, ".tsv"))
+  
+  map_tbl <- map_with_cache(rank_genes, cache_path) %>%
+    mutate(query = toupper(query))
+
+  sigma54_targets <- unique(df[[gene_col]][df[[s54_col]] %in% TRUE])
+  
+  sigma54_targets <- unique(df[[gene_col]][df[[s54_col]] %in% TRUE])
+
+  route_sets <- list(
+    PFLU1132_pathway      = c("PFLU_1130","PFLU_1131","PFLU_1132"),
+    Glycine_cleavage      = c("PFLU_4897","PFLU_4899"),
+    Pyrimidine_Aspartate  = c("PFLU_5758","PFLU_5759","PFLU_1851"),
+    Anti_sigma_system     = c("PFLU_1583","PFLU_1584"),
+    NO_reductase          = c("PFLU_5141", "PFLU_5142", "PFLU_5143"),
+    Sigma54_targets       = sigma54_targets
+  )
+  route_sets_string <- route_sets
+  
+  to_expand <- setdiff(names(route_sets), "Sigma54_targets")
+  
+  for (nm in to_expand) {
+    route_sets_string[[nm]] <- expand_geneset_string(
+      seed_genes = route_sets[[nm]],
+      ranks_genes = rank_genes,
+      map_tbl = map_tbl,
+      edges_tbl = string_edges,
+      score_min = STRING_SCORE_MIN,
+      max_neighbors_per_seed = MAX_NEIGHBORS_PER_SEED
+    )
+  }
+  
+  set_sizes_seed   <- sapply(route_sets, length)
+  set_sizes_string <- sapply(route_sets_string, length)
+  print(tibble(pathway = names(route_sets),
+               seed_size = set_sizes_seed,
+               string_size = set_sizes_string))
+
+  route_sets2 <- lapply(route_sets_string, \(x) intersect(x, names(ranks)))
+  set_sizes   <- sapply(route_sets2, length)
+  
+  fg <- fgseaMultilevel(
+    pathways = route_sets2,
+    stats = ranks,
+    minSize = 5,    
+    maxSize = 500
+  ) %>%
+    mutate(
+      strain = strain_name,
+      RHA = RHA_name,
+      set_size_in_data = set_sizes[pathway]
+    ) %>%
+    arrange(padj)
+
+  fg
+}
+
+groups <- logfc %>%
+  distinct(.data[[strain_col]], .data[[RHA_col]]) %>%
+  arrange(.data[[strain_col]], .data[[RHA_col]])
+
+fg_route_all <- bind_rows(lapply(seq_len(nrow(groups)), function(i) {
+  s <- groups[[strain_col]][i]
+  e <- groups[[RHA_col]][i]
+  df_se <- logfc %>% filter(.data[[strain_col]] == s, .data[[RHA_col]] == e)
+  run_routes_one_group(df_se, s, e)
+}))
+
+fg_route_all %>%
+  select(strain, RHA, pathway, NES, padj, size, set_size_in_data) %>%
+  arrange(strain, RHA, padj)
+
+
+fg_route_all_out <- fg_route_all %>%
+  mutate(
+    leadingEdge = vapply(leadingEdge, paste, collapse = ";", FUN.VALUE = character(1))
+  )
+
+write.csv(
+  fg_route_all_out,
+  "mutations_fgsea/string_compare_NES_table.csv",
+  row.names = FALSE
+)
+
+```
+```{r}
+p <- ggplot(fg_route_all, aes(x = pathway, y = NES)) +
+  geom_col() +
+  facet_grid(RHA ~ strain) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+p
+
+ggsave(
+  filename = "mutations_fgsea/String_Route_GSEA_NES_plot.png",
+  plot = p,
+  width = 10,
+  height = 6,
+  dpi = 300
+)
+```
+
+
