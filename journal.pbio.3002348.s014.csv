@@ -1,0 +1,182 @@
+PseudoCAP ID,dfleQdntrC,PFLU1131-del15,dfleQntrB-T97P,Product,Grouping
+PFLU_4734,0.161427854,2.071837523,3.9,flagella basal body P-ring formation protein FlgA,F
+PFLU_4731,0.309652194,4.224172706,3.6,flagellar basal body rod protein FlgB,F
+PFLU_4730,-0.094175771,3.514951702,4.4,flagellar basal body rod protein FlgC,F
+PFLU_4729,0.061478131,3.452565508,4.4,flagellar hook assembly protein FlgD,F
+PFLU_4728,-0.05608699,3.267262877,4.4,flagellar hook protein FlgE,F
+PFLU_4442,0.094491266,1.525563044,0.8,PAS domain-containing sensor histidine kinase,F
+PFLU_4441,0.838912473,1.551897757,0.1,sigma-54-dependent Fis family transcriptional regulator,F
+PFLU_4440,0.737447871,2.984859067,1.9,flagellar hook-basal body complex protein FliE,F
+PFLU_4439,0.664032664,2.731069229,1.7,flagellar basal body M-ring protein FliF,F
+PFLU_4438,0.488356288,2.787620605,1.6,flagellar motor switch protein FliG,F
+PFLU_4437,0.411682448,2.747221076,1.7,flagellar assembly protein FliH,F
+PFLU_4436,0.513838877,2.626747958,1.7,flagellar protein export ATPase FliI,F
+PFLU_4435,0.685102941,2.248267074,1.5,flagella biosynthesis chaperone FliJ,F
+PFLU_4430,-0.038986355,1.058463335,2,flagellar hook-length control protein FliK,F
+PFLU_4429,0.112058839,3.132091929,3.7,flagellar basal body-associated protein FliL,F
+PFLU_4428,0.072844017,2.362089689,3,flagellar motor switch protein FliM,F
+PFLU_4427,-0.183441412,2.462262291,3.1,flagellar motor switch protein FliN,F
+PFLU_4426,0.067604534,2.468028991,2.6,flagellar biosynthetic protein FliO,F
+PFLU_4425,-0.091803587,1.733463445,2.2,flagellar biosynthetic protein FliP,F
+PFLU_4424,-0.048100454,1.703077891,2.8,flagellar biosynthetic protein FliQ,F
+PFLU_4423,-0.077211582,2.139420845,1.9,flagellar type III secretion system protein FliR,F
+PFLU_4422,0.077039671,1.880967632,1.8,flagellar biosynthesis protein FlhB,F
+PFLU_0882,-0.034176764,0.011923516,0.5,RNA polymerase factor sigma-54,N
+PFLU_3423,0.031107055,0.283337444,0.4,ABC transporter permease,N
+PFLU_3422,0.027925143,0.106808998,0.7,branched-chain amino acid ABC transporter permease,N
+PFLU_3421,-0.378502865,0.057041138,0.5,branched-chain amino acid ABC transporter permease,N
+PFLU_3420,-0.350493897,0.020142614,0.4,ABC transporter ATP-binding protein,N
+PFLU_2326,0.121550408,1.83644283,4.1,FMN-binding glutamate synthase family protein,N
+PFLU_2325,0.167582418,1.233910639,4,protein glxC,N
+PFLU_2324,0.34167889,1.379390778,4.5,glutamine amidotransferase,N
+PFLU_2323,0.788093971,2.220615809,2.6,type III glutamate--ammonia ligase,N
+PFLU_5953,0.106532674,0.178775336,3,P-II family nitrogen regulator,N
+PFLU_5952,0.092163274,0.712924181,6.4,ammonium transporter,N
+PFLU_5906,-0.003495299,1.815482846,5.9,amino acid ABC transporter ATP-binding protein,N
+PFLU_5905,0.155435828,1.541681297,5.7,amino acid ABC transporter permease,N
+PFLU_5904,0.420861124,3.303614657,7.5,amino acid ABC transporter permease,N
+PFLU_5903,-0.840873579,3.254804805,8.5,amino acid ABC transporter substrate-binding protein,N
+PFLU_4955,-0.580411062,-1.231933137,1.2,MFS transporter,N
+PFLU_4644,0.031939948,0.948811279,3.3,Asp/Glu/hydantoin racemase,N
+PFLU_4609,-0.124965042,2.860696978,2.3,NarK/NasA family nitrate transporter,N
+PFLU_4607,-0.33808577,2.067887244,5.3,nitrate ABC transporter substrate-binding protein,N
+PFLU_4099,0.236479532,0.135299402,1.9,ABC transporter substrate-binding protein,N
+PFLU_4098,0.301847414,0.007866051,1.8,amino acid ABC transporter permease,N
+PFLU_4097,0.179743404,0.052278768,0.8,amino acid ABC transporter ATP-binding protein,N
+PFLU_4026,0.261589407,2.616143412,4.8,nitrogen assimilation transcriptional regulator,N
+PFLU_3584,-0.456138449,-0.087211211,3.165151249,amino acid ABC transporter ATP-binding protein,N
+PFLU_3583,-0.291526015,0.434079424,4.711588844,amino acid ABC transporter permease,N
+PFLU_3582,-0.151017942,0.14469244,4.689266168,amino acid ABC transporter substrate-binding protein,N
+PFLU_3426,0.192289061,0.468378506,3.619772642,reductase,N
+PFLU_3425,0.685126676,1.601968071,3.954827561,nitrite reductase large subunit,N
+PFLU_2620,0.641595329,0.473978266,3.115739764,amino acid ABC transporter ATP-binding protein,N
+PFLU_2619,0.036836894,-0.203940895,4.119747594,amino acid ABC transporter permease,N
+PFLU_2618,0.537668512,0.406374504,3.680774875,amino acid ABC transporter permease,N
+PFLU_2617,0.222778833,0.01836893,3.672934778,ABC transporter substrate-binding protein,N
+PFLU_2337,0.039711626,2.782459117,5.217128793,histidine kinase,N
+PFLU_2056,0.094154887,1.698940318,2.099686177,monooxygenase,N
+PFLU_1991,0.035538678,-0.411576847,0.287604443,polysaccharide deacetylase,N
+PFLU_1747,-0.044091396,2.665758736,1.644916331,ammonium transporter,N
+PFLU_1138,-0.444235213,-0.363367776,-1.1,amino acid ABC transporter permease,N
+PFLU_1137,-0.453938764,-0.371095558,-1.3,ABC transporter permease subunit,N
+PFLU_1136,-0.457280655,-0.324695287,-1.3,amino acid ABC transporter ATP-binding protein,N
+PFLU_1003,-0.307391443,-0.082129285,6.635124743,amino acid ABC transporter ATP-binding protein,N
+PFLU_1002,-0.322298792,-0.193513668,7.299146279,amino acid ABC transporter permease,N
+PFLU_1001,-0.292265136,-0.048917203,8.223746309,amino acid ABC transporter permease,N
+PFLU_1000,-0.384519542,-0.313928656,8.902329466,amino acid ABC transporter substrate-binding protein,N
+PFLU_0588,0.249706773,3.418686991,8.741978648,urea ABC transporter substrate-binding protein,N
+PFLU_0587,-0.093319822,3.433426965,7.053790482,urea ABC transporter permease subunit UrtB,N
+PFLU_0586,-0.209457703,2.386559839,6.642684477,urea ABC transporter permease subunit UrtC,N
+PFLU_0585,0.083084786,1.638149794,6.869463432,urea ABC transporter ATP-binding protein UrtD,N
+PFLU_0584,-0.057124189,1.471057168,6.762401972,urea ABC transporter ATP-binding subunit UrtE,N
+PFLU_0583,0.075689458,0.057997168,3.642204571,urease accessory protein,N
+PFLU_0563,0.46923334,2.058186389,6.951842333,urease accessory protein UreE,N
+PFLU_0562,0.067791365,2.455074417,4.451796579,urease accessory protein UreF,N
+PFLU_0561,-0.147672246,2.303646214,5.940176008,urease accessory protein UreG,N
+PFLU_0554,-0.073540537,1.368254284,6.547963664,high-affinity branched-chain amino acid ABC transporter permease LivM,N
+PFLU_0553,-0.023425384,1.567685754,6.565710491,branched-chain amino acid ABC transporter permease,N
+PFLU_0551,0.14233342,1.56378129,7.166451543,branched-chain amino acid ABC transporter substrate-binding protein,N
+PFLU_0348,-0.103212308,0.757484148,2.556319784,type I glutamate--ammonia ligase,N
+PFLU_5678,0.011294715,0.266550401,6.545134997,GlxA family transcriptional regulator,other
+PFLU_5248,0.573751459,1.568683458,0.543028899,BON domain-containing protein,other
+PFLU_5240,-0.10908345,-0.098077689,0.068865175,2-amino-4-hydroxy-6- hydroxymethyldihydropteridine diphosphokinase,other
+PFLU_5239,-0.108678899,-0.036508459,-0.3,polynucleotide adenylyltransferase PcnB,other
+PFLU_5193,0.274351077,0.772994243,4.861659552,helix-turn-helix domain-containing protein,other
+PFLU_4833,0.209857293,0.971091878,-0.4,PA2169 family four-helix-bundle protein,other
+PFLU_4818,-0.022746848,2.571331669,4.101698899,hypothetical protein,other
+PFLU_4742,0.424161018,0.631369914,-0.6,hypothetical protein,other
+PFLU_4741,0.305344872,0.37748015,-1.1,hypothetical protein,other
+PFLU_4727,-0.011828535,0.51524016,-0.3,hypothetical protein,other
+PFLU_4717,0.363521611,1.456178085,1.615279508,C4-dicarboxylate transporter,other
+PFLU_4666,0.278205335,0.653132196,4.949879131,circularly permuted type 2 ATP-grasp protein,other
+PFLU_4665,0.332819522,0.740009034,4.283294715,alpha-E domain-containing protein,other
+PFLU_4664,-0.151633584,0.478036141,4.610340997,transglutaminase family protein,other
+PFLU_4643,-0.18497495,-0.031648271,2.139983482,NCS1 family nucleobase:cation symporter-1,other
+PFLU_4611,-0.436523425,1.220295021,2.462628339,uroporphyrinogen-III C-methyltransferase,other
+PFLU_4610,0.267417112,1.508401552,2.257687741,bifunctional protein-serine/threonine kinase/phosphatase,other
+PFLU_4608,0.135372193,2.451140472,5.34792427,ANTAR domain-containing protein,other
+PFLU_4518,0.159925095,0.516727268,6.662098433,NCS1 family nucleobase:cation symporter-1,other
+PFLU_4334,0.871166298,2.16074188,-1.5,DUF3509 domain-containing protein,other
+PFLU_4306,0.153032965,0.272038124,0,GGDEF domain-containing protein,other
+PFLU_4161,-0.166198831,-0.409251713,-2.3,asparaginase,other
+PFLU_4100,0.233753287,0.01043201,1.460758969,GntR family transcriptional regulator,other
+PFLU_4096,-0.031116711,-0.187528445,1.252472278,gamma-glutamyltransferase family protein,other
+PFLU_3746,0.071530731,1.412414406,0.595689452,ABC transporter ATP-binding protein,other
+PFLU_3745,0.148762192,0.913809724,-0.1,ABC transporter ATP-binding protein,other
+PFLU_3744,-0.065898224,0.967187791,0.718601776,sugar ABC transporter permease,other
+PFLU_3743,0.002043864,0.79312041,0.296692213,carbohydrate ABC transporter permease,other
+PFLU_3742,1.081621959,1.048277206,0.015916415,membrane protein,other
+PFLU_3741,0.080374243,0.263487328,0.051408578,carbohydrate ABC transporter substrate-binding protein,other
+PFLU_3585,-0.185929616,0.079270424,2.384785449,FAD-binding oxidoreductase,other
+PFLU_3419,-0.147046782,-0.297841324,1.104273985,acyl-CoA synthetase,other
+PFLU_3136,-0.141940255,0.82349785,5.950141951,alpha-E domain-containing protein,other
+PFLU_3135,0.019619739,1.045400251,6.312209087,circularly permuted type 2 ATP-grasp protein,other
+PFLU_2803,0.041125085,1.448659707,6.136730204,aldehyde dehydrogenase,other
+PFLU_2802,0.234220265,1.883543963,3.108143368,(2Fe-2S)-binding protein,other
+PFLU_2791,0.003729172,1.790418221,1.429723931,aliphatic sulfonate ABC transporter substrate-binding protein,other
+PFLU_2790,-0.206069804,1.358906436,0.5232501,ABC transporter permease,other
+PFLU_2789,0.053437812,1.425884168,1.80170748,ABC transporter ATP-binding protein,other
+PFLU_2730,0.348960133,2.157295848,1.893427839,dimethyl sulfone monooxygenase SfnG,other
+PFLU_2701,0.205198037,1.037186414,0.524923318,hypothetical protein,other
+PFLU_2700,-0.260291211,0.002144975,1.209092725,hypothetical protein,other
+PFLU_2629,0.044141504,0.495395933,-0.7,GntP family permease,other
+PFLU_2628,0.262754186,0.172419495,-1,3-hydroxybutyrate dehydrogenase,other
+PFLU_2621,0.237637138,0.174417797,1.839404285,RidA family protein,other
+PFLU_2573,-0.010843082,0.085447416,0.248793599,hypothetical protein,other
+PFLU_2385,0.116903087,2.14402182,3.584912967,dehydrogenase,other
+PFLU_2384,0.09058352,2.190781776,3.55533174,hydroxypyruvate isomerase,other
+PFLU_2383,-0.16991219,1.636358391,2.541315247,sugar ABC transporter substrate-binding protein,other
+PFLU_2339,0.449887323,2.537621192,5.682771598,diguanylate cyclase,other
+PFLU_2338,0.098328617,2.305975897,4.71089028,DNA-binding response regulator,other
+PFLU_2224,-0.039153966,1.424298808,1.750113804,alpha/beta hydrolase,other
+PFLU_2223,0.096455385,1.429636172,2.57898186,ABC transporter ATP-binding protein,other
+PFLU_2222,0.114810624,1.354964772,1.978921921,ABC transporter permease,other
+PFLU_2221,0.175743603,2.277818815,3.083743366,ABC transporter permease,other
+PFLU_2220,-0.009200044,2.697526983,3.717672146,ABC transporter substrate-binding protein,other
+PFLU_2219,-0.175534256,0.846100192,1.241720188,tetratricopeptide repeat protein,other
+PFLU_2218,0.058622178,2.387245212,2.616804576,S58 family peptidase,other
+PFLU_2216,0.055595559,1.288041383,0.720446763,TonB-dependent receptor,other
+PFLU_2215,0.295225718,1.641250384,0.831329075,LLM class flavin-dependent oxidoreductase,other
+PFLU_2214,0.15945884,1.070657416,0.866171393,stationary-phase survival protein,other
+PFLU_2213,-0.036534124,1.25594796,1.233479423,LLM class flavin-dependent oxidoreductase,other
+PFLU_2212,-0.105839828,1.007433396,2.747501694,LLM class flavin-dependent oxidoreductase,other
+PFLU_2211,0.146963402,0.307993197,0.2,LLM class flavin-dependent oxidoreductase,other
+PFLU_2210,0.042578181,0.140304233,0.4,LLM class flavin-dependent oxidoreductase,other
+PFLU_2058,-0.408619941,2.453958143,3.3,FMN reductase,other
+PFLU_2057,0.107325615,2.155536383,1.7,"alkanesulfonate monooxygenase, FMNH(2)-dependent",other
+PFLU_2055,0.065742632,1.144153412,0.2,sigma-54-dependent Fis family transcriptional regulator,other
+PFLU_2039,0.29423499,0.731129438,4.4,extracellular solute-binding protein,other
+PFLU_2038,0.427504325,0.529283991,3.8,alkaline phosphatase family protein,other
+PFLU_2037,0.037793358,0.417913304,2.9,ABC transporter permease subunit,other
+PFLU_2036,-0.110504869,0.480587269,2.2,ABC transporter permease,other
+PFLU_2035,0.043629399,0.523400773,3.6,ABC transporter ATP-binding protein,other
+PFLU_2034,0.219754254,0.118496983,0.9,HAD-IB family hydrolase,other
+PFLU_1992,0.156616297,-0.477837682,0.3,amidase,other
+PFLU_1990,-0.175740794,-0.594598165,0.8,MFS transporter,other
+PFLU_1989,-0.294146296,-0.621083451,0.1,SDR family oxidoreductase,other
+PFLU_1988,-0.225027332,-0.453482569,-0.1,SDR family oxidoreductase,other
+PFLU_1987,-0.015979807,-0.050895503,-0.4,GTP-binding protein,other
+PFLU_1984,0.021988856,0.235824096,0.3,NADH:flavin oxidoreductase,other
+PFLU_1630,0.206120809,0.227979108,0.9,LuxR family transcriptional regulator,other
+PFLU_1629,0.062732018,-0.067370379,0.1,L-amino acid amidase,other
+PFLU_1139,-0.334798523,-0.3315919,-1.2,glutamate/aspartate ABC transporter substrate-binding protein,other
+PFLU_1033,-0.137465049,0.399305268,4,DUF3509 domain-containing protein,other
+PFLU_0709,-0.146835862,0.268920128,1.5,RNA polymerase sigma factor,other
+PFLU_0560,-0.389463786,1.603311625,6,protein hupE,other
+PFLU_0556,-0.024331273,1.425867993,6.4,ABC transporter ATP-binding protein,other
+PFLU_0555,-0.174373185,1.251777521,6.4,ABC transporter ATP-binding protein,other
+PFLU_0541,0.01421369,0.263230167,3,transglutaminase family protein,other
+PFLU_0469,0.34001078,2.076863385,2.7,sugar ABC transporter substrate-binding protein,other
+PFLU_0446,0.063202923,0.146011074,0.9,K+/H+ antiporter NhaP2,other
+PFLU_0445,-0.036684708,-0.008040564,0.5,mechanosensitive channel MscK,other
+PFLU_0444,-0.143527521,-0.240755584,0.5,YdiU family protein,other
+PFLU_0091,0.419734662,1.087758765,-1.2,hypothetical protein,other
+PFLU_0089,0.843599753,1.504021137,-1.3,hypothetical protein,other
+PFLU_1129,-0.306688472,1.769971465,2.2,alpha/beta fold hydrolase,other
+PFLU_1128,-0.337703996,1.838793239,1.6,aminotransferase class III-fold pyridoxal phosphate-dependent enzyme,other
+PFLU_1127,-0.452256255,1.764495178,1.9,"2,3-diketo-5-methylthio-1-phosphopentane phosphatase",other
+PFLU_1126,-0.366226956,2.052223142,-0.4,MipA/OmpV family protein,other
+PFLU_1125,-0.358161451,2.200874029,3.6,fatty acid desaturase,other
+PFLU_1124,-0.437843598,1.694073512,3.6,transporter,other
+PFLU_1123,-0.496516739,1.768389514,3.7,transporter,other
+PFLU_1122,-0.464837715,1.956151761,2.9,hypothetical protein,other
