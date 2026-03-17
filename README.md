@@ -16,3 +16,7 @@ Rha vs No Rha barplot (Figure 2a). Withn strain σ⁵⁴-target expression as a 
 ### 6.Mutation to Regulatory Prediction
 
 FGSEA and STRING expanded FGSEA (Figure 3a).
+
+### 7.Variant Calling
+
+Alignment and variant calling. Input WGS reads available on SRA at BioProject ID: PRJNA992893.
