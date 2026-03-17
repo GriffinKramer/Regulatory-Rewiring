@@ -1,0 +1,299 @@
+---
+title: "8.variant_calling_analysis.Rmd"
+author: "Griffin Kramer"
+date: "2026-03-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(dplyr)
+library(stringr)
+library(purrr)
+library(readr)
+library(tidyr)
+
+library(GenomicRanges)
+library(rtracklayer)
+```
+
+```{r}
+
+vcf_dir <- "variant_calling/vcf"
+gff_file <- "genomic.gff"
+
+vcf_files <- list.files(
+  vcf_dir,
+  pattern = "_bcftools\\.vcf$",
+  full.names = TRUE
+)
+
+gff_gr <- import(gff_file)
+
+genes_gr <- gff_gr[gff_gr$type == "gene"]
+
+
+mcols_names <- names(mcols(genes_gr))
+print(mcols_names)
+
+if ("locus_tag" %in% mcols_names) {
+  mcols(genes_gr)$locus_tag <- as.character(mcols(genes_gr)$locus_tag)
+
+} else if ("Name" %in% mcols_names) {
+  mcols(genes_gr)$locus_tag <- as.character(mcols(genes_gr)$Name)
+
+} else if ("ID" %in% mcols_names) {
+  mcols(genes_gr)$locus_tag <- as.character(mcols(genes_gr)$ID) %>%
+    str_remove("^gene[-:]?")
+
+} else if ("attributes" %in% mcols_names) {
+  mcols(genes_gr)$locus_tag <- str_match(
+    as.character(mcols(genes_gr)$attributes),
+    "locus_tag=([^;]+)"
+  )[,2]
+
+} else {
+  stop(
+    "Couldn't find locus_tag/Name/ID/attributes in imported GFF. ",
+    "Metadata columns are: ", paste(mcols_names, collapse = ", ")
+  )
+}
+
+genes_gr <- genes_gr[!is.na(mcols(genes_gr)$locus_tag) & mcols(genes_gr)$locus_tag != ""]
+
+
+read_vcf_min <- function(vcf_file) {
+  df <- read_tsv(
+    vcf_file,
+    comment = "#",
+    col_names = c("CHROM","POS","ID","REF","ALT","QUAL","FILTER","INFO","FORMAT","SAMPLE"),
+    col_types = cols(.default = "c")
+  ) %>%
+    mutate(
+      POS = as.integer(POS),
+      sample = basename(vcf_file) %>% str_remove("\\.vcf$"),
+      ALT = str_split(ALT, ",")
+    ) %>%
+    unnest(ALT)
+
+  df
+}
+
+
+variants_to_gr <- function(df) {
+  GRanges(
+    seqnames = df$CHROM,
+    ranges   = IRanges(start = df$POS, width = pmax(nchar(df$REF), 1L)),
+    strand   = "*",
+    sample   = df$sample,
+    POS      = df$POS,
+    REF      = df$REF,
+    ALT      = df$ALT,
+    QUAL     = df$QUAL,
+    FILTER   = df$FILTER,
+    INFO     = df$INFO
+  )
+}
+
+
+annotate_nearest_gene <- function(var_gr, genes_gr) {
+  hits <- distanceToNearest(var_gr, genes_gr, ignore.strand = TRUE)
+  q <- queryHits(hits)
+  s <- subjectHits(hits)
+
+  nearest_gene <- rep(NA_character_, length(var_gr))
+  dist_bp      <- rep(NA_integer_,   length(var_gr))
+  gene_start   <- rep(NA_integer_,   length(var_gr))
+  gene_end     <- rep(NA_integer_,   length(var_gr))
+  gene_strand  <- rep(NA_character_, length(var_gr))
+
+  nearest_gene[q] <- mcols(genes_gr)$locus_tag[s]
+  dist_bp[q]      <- mcols(hits)$distance
+  gene_start[q]   <- start(genes_gr)[s]
+  gene_end[q]     <- end(genes_gr)[s]
+  gene_strand[q]  <- as.character(strand(genes_gr)[s])
+
+  ov <- overlapsAny(var_gr, genes_gr, ignore.strand = TRUE)
+
+  mcols(var_gr)$nearest_gene <- nearest_gene
+  mcols(var_gr)$dist_bp      <- dist_bp
+  mcols(var_gr)$within_gene  <- ov
+  mcols(var_gr)$gene_start   <- gene_start
+  mcols(var_gr)$gene_end     <- gene_end
+  mcols(var_gr)$gene_strand  <- gene_strand
+
+  var_gr
+}
+
+all_vars_df <- map_dfr(vcf_files, read_vcf_min)
+var_gr <- variants_to_gr(all_vars_df)
+var_gr_annot <- annotate_nearest_gene(var_gr, genes_gr)
+
+variants_annot_tbl <- as_tibble(mcols(var_gr_annot)) %>%
+  mutate(
+    CHROM = as.character(seqnames(var_gr_annot)),
+    start = start(var_gr_annot),
+    end   = end(var_gr_annot),
+    variant_id = paste0(CHROM, ":", POS, " ", REF, ">", ALT)
+  ) %>%
+  select(sample, CHROM, POS, start, end, REF, ALT, variant_id,
+         nearest_gene, within_gene, dist_bp, gene_start, gene_end, gene_strand,
+         QUAL, FILTER, INFO)
+
+write_tsv(variants_annot_tbl, "variant_calling/variants_with_nearest_gene.tsv")
+```
+
+```{r}
+
+var_gr2 <- var_gr_annot
+
+
+gene_shared <- as_tibble(mcols(var_gr2)) %>%
+  mutate(
+    CHROM = as.character(seqnames(var_gr2)),
+    start = start(var_gr2),
+    end   = end(var_gr2)
+  ) %>%
+  filter(!is.na(nearest_gene)) %>%
+  group_by(nearest_gene) %>%
+  summarise(
+    n_variants = n(),
+    n_samples  = n_distinct(sample),
+    samples    = paste(sort(unique(sample)), collapse = ", "),
+    .groups = "drop"
+  ) %>%
+  filter(n_samples >= 2) %>%
+  arrange(desc(n_samples), desc(n_variants))
+
+write_tsv(gene_shared, "variant_calling/shared_by_gene.tsv")
+
+
+cluster_ranges <- reduce(var_gr2, min.gapwidth = 501)  
+
+hits <- findOverlaps(var_gr2, cluster_ranges, ignore.strand = TRUE)
+cluster_id <- rep(NA_integer_, length(var_gr2))
+cluster_id[queryHits(hits)] <- subjectHits(hits)
+mcols(var_gr2)$cluster_id <- cluster_id
+
+region_shared <- as_tibble(mcols(var_gr2)) %>%
+  mutate(
+    CHROM = as.character(seqnames(var_gr2)),
+    start = start(var_gr2),
+    end   = end(var_gr2)
+  ) %>%
+  filter(!is.na(cluster_id)) %>%
+  group_by(cluster_id) %>%
+  summarise(
+    CHROM = dplyr::first(CHROM),
+    cluster_start = min(start),
+    cluster_end   = max(end),
+    width_bp      = cluster_end - cluster_start + 1,
+    n_variants    = n(),
+    n_samples     = n_distinct(sample),
+    samples       = paste(sort(unique(sample)), collapse = ", "),
+    genes_touched = paste(sort(unique(na.omit(nearest_gene))), collapse = ", "),
+    .groups = "drop"
+  ) %>%
+  filter(n_samples >= 2) %>%
+  arrange(desc(n_samples), desc(n_variants))
+
+write_tsv(region_shared, "variant_calling/shared_by_region_500bp.tsv")
+```
+
+#PFLU_RS25235
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(pheatmap)
+
+cluster_meta <- tibble(
+  cluster_id = mcols(var_gr2)$cluster_id,
+  CHROM      = as.character(seqnames(var_gr2)),
+  start      = start(var_gr2),
+  end        = end(var_gr2),
+  nearest_gene = mcols(var_gr2)$nearest_gene,
+  sample     = mcols(var_gr2)$sample
+) %>%
+  filter(!is.na(cluster_id)) %>%
+  group_by(cluster_id) %>%
+  summarise(
+    CHROM = CHROM[1],
+    cluster_start = min(start),
+    cluster_end   = max(end),
+    width_bp      = cluster_end - cluster_start + 1,
+    n_samples     = n_distinct(sample),
+    genes_touched = paste(sort(unique(na.omit(nearest_gene))), collapse = ", "),
+    .groups = "drop"
+  ) %>%
+  filter(n_samples >= 2) %>%
+  arrange(desc(n_samples), desc(width_bp))
+
+cluster_meta <- cluster_meta %>%
+  mutate(
+    cluster_label = paste0(CHROM, ":", cluster_start, "-", cluster_end),
+    cluster_label_gene = if_else(
+      genes_touched == "",
+      cluster_label,
+      paste0(cluster_label, " | ", genes_touched)
+    )
+  )
+
+presence <- tibble(
+  cluster_id = mcols(var_gr2)$cluster_id,
+  sample     = mcols(var_gr2)$sample
+) %>%
+  filter(!is.na(cluster_id)) %>%
+  distinct() %>%
+  mutate(present = 1L) %>%
+  semi_join(cluster_meta %>% select(cluster_id), by = "cluster_id")
+
+wide <- presence %>%
+  pivot_wider(
+    names_from = sample,
+    values_from = present,
+    values_fill = 0L
+  ) %>%
+  left_join(cluster_meta %>% select(cluster_id, cluster_label_gene, n_samples, width_bp),
+            by = "cluster_id") %>%
+  arrange(desc(n_samples), desc(width_bp))
+
+mat <- wide %>%
+  select(-cluster_id, -cluster_label_gene, -n_samples, -width_bp) %>%
+  as.data.frame()
+
+rownames(mat) <- wide$cluster_label_gene
+mat <- as.matrix(mat)
+mode(mat) <- "numeric"
+
+pheatmap(
+  mat,
+  cluster_rows = TRUE,
+  cluster_cols = TRUE,
+  border_color = NA,
+  fontsize_row = 6,
+  fontsize_col = 9,
+  main = "Shared mutation regions (≤500 bp clusters): presence/absence"
+)
+
+```
+```{r}
+colnames(mat) <- str_remove(colnames(mat), "_fastq_bcftools$")
+pheatmap(
+  mat,
+  color = c("#f0f0f0", "#d73027"),
+  breaks = c(-0.01, 0.5, 1.01),
+  cluster_rows = TRUE,
+  cluster_cols = TRUE,
+  border_color = NA,
+  fontsize_row = 6,
+  fontsize_col = 9,
+  main = "Shared mutation regions (≤500 bp clusters)",
+  filename = "variant_calling/clustered_gene_mutations_heatmap.png",
+  legend = FALSE,
+  width = 10, height = 7
+)
+```
+
