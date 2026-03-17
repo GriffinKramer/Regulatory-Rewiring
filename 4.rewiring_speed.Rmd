@@ -1,0 +1,57 @@
+---
+title: "4.rewiring_speed"
+author: "Griffin Kramer"
+date: "2026-02-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(readr)
+library(dplyr)
+library(stringr)
+library(tidyr)
+library(ggplot2)
+library(broom)
+```
+
+
+```{r}
+
+df <- read_csv("results/LOGFC_TABLE.csv")
+
+df_filtered <- df %>%
+  filter(is_sigma54_validated == TRUE) %>%
+  mutate(
+    strain = as.factor(strain),
+    rhamnose = factor(rhamnose, levels = c("NoRha","Rha"))
+  )
+
+p <- df_filtered %>%
+  group_by(strain, rhamnose) %>%
+  summarise(mean_log2FC = mean(log2FC, na.rm = TRUE),
+            .groups = "drop") %>%
+  ggplot(aes(x = strain, y = mean_log2FC, fill = rhamnose)) +
+  geom_col(position = position_dodge(width = 0.8), width = 0.7) +
+  geom_hline(yintercept = 0) +
+  theme_classic() +
+  labs(
+    y = "Mean log2FC",
+    x = "Strain"
+  )
+
+ggsave("rewiring_speed/sigma54_predicted_mean_log2FC.png", p, width = 8, height = 4, dpi = 300)
+
+wilcox_results <- df_filtered %>%
+  group_by(strain) %>%
+  do(tidy(wilcox.test(log2FC ~ rhamnose, data = .))) %>%
+  ungroup() %>%
+  mutate(p_adj = p.adjust(p.value, method = "BH"),
+         .after = strain)
+
+write_csv(wilcox_results, "rewiring_speed/wilcox_sigma54_predicted_by_strain.csv")
+
+print(wilcox_results)
+
+```
+
