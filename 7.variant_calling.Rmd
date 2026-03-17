@@ -1,0 +1,467 @@
+---
+title: "variant_calling"
+author: "Griffin Kramer"
+date: "2026-02-26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(purrr)
+library(stringr)
+library(tibble)
+library(fs)
+library(readr)
+library(dplyr)
+library(stringr)
+
+base_dir <- "SRA_data"
+```
+
+```{r}
+pick_pair <- function(fqs) {
+  b <- basename(fqs)
+
+  r1 <- fqs[str_detect(b, "(^|[_\\.])R1([_\\.]|$)")]
+  r2 <- fqs[str_detect(b, "(^|[_\\.])R2([_\\.]|$)")]
+
+  if (length(r1) == 0 && length(r2) == 0) {
+    r1 <- fqs[str_detect(b, "(_|\\.)1\\.(fastq|fq)(\\.gz)?$")]
+    r2 <- fqs[str_detect(b, "(_|\\.)2\\.(fastq|fq)(\\.gz)?$")]
+  }
+
+  if (length(r1) != 1 || length(r2) != 1) {
+    stop(
+      "Could not uniquely identify R1/R2 from:\n",
+      paste("  ", fqs, collapse = "\n"),
+      call. = FALSE
+    )
+  }
+
+  list(fq1 = r1, fq2 = r2)
+}
+```
+
+```{r}
+sample_dirs <- dir_ls(base_dir, type = "directory")
+
+samples <- map_dfr(sample_dirs, function(d) {
+
+  fqs <- dir_ls(
+    d,
+    regexp = "\\.(fastq|fq)(\\.gz)?$",
+    type = "file"
+  )
+
+  pair <- pick_pair(fqs)
+
+  tibble(
+    sample = path_file(d),
+    fq1 = pair$fq1,
+    fq2 = pair$fq2
+  )
+})
+
+samples %>%
+  mutate(
+    fq1 = basename(fq1),
+    fq2 = basename(fq2)
+  )
+```
+
+```{r}
+run_cmd <- function(cmd, quiet = TRUE) {
+  message("> ", cmd)
+
+  status <- system(
+    cmd,
+    ignore.stdout = quiet,   
+    ignore.stderr = quiet    
+  )
+
+  if (status != 0) stop("Command failed (exit ", status, "):\n", cmd, call. = FALSE)
+  invisible(status)
+}
+
+align_all_to_bam <- function(samples, ref_fa,
+                             out_bam_dir = "bam",
+                             threads = 8) {
+
+  dir.create(out_bam_dir, showWarnings = FALSE, recursive = TRUE)
+
+  purrr::pwalk(samples, function(sample, fq1, fq2) {
+    out_bam <- file.path(out_bam_dir, paste0(sample, ".sorted.bam"))
+
+    if (file.exists(out_bam) && file.exists(paste0(out_bam, ".bai"))) {
+      message("skip (exists): ", out_bam)
+      return(invisible(NULL))
+    }
+
+    rg <- paste0("@RG\\tID:", sample, "\\tSM:", sample)
+
+    logf <- file.path(out_bam_dir, paste0(sample, ".minimap2.log"))
+
+    cmd <- paste0(
+      shQuote(mm2), " -t ", threads, " -ax sr -R ", shQuote(rg), " ",
+      shQuote(ref_fa), " ",
+      shQuote(fq1), " ",
+      shQuote(fq2),
+      " 2> ", shQuote(logf),
+      " | ", shQuote(samtools), " view -b - ",
+      " | ", shQuote(samtools), " sort -@ ", threads,
+      " -o ", shQuote(out_bam), " -"
+    )
+
+    run_cmd(cmd, quiet = TRUE)
+    run_cmd(paste0(shQuote(samtools), " index ", shQuote(out_bam)), quiet = TRUE)
+  })
+
+  invisible(TRUE)
+}
+```
+
+```{r}
+
+conda_bin <- "/opt/anaconda3/envs/mapcall/bin"
+mm2      <- file.path(conda_bin, "minimap2")
+samtools <- file.path(conda_bin, "samtools")
+
+stopifnot(file.exists(mm2), file.exists(samtools))
+
+ref_fa <- "swb25_genomic.fna"
+stopifnot(file.exists(ref_fa))
+
+
+align_all_to_bam(
+  samples,
+   ref_fa,
+   out_bam_dir = "variant_calling/bam",
+   threads = 8
+ )
+```
+
+```{r}
+conda_bin <- "/opt/anaconda3/envs/mapcall/bin"
+bcftools  <- file.path(conda_bin, "bcftools")
+stopifnot(file.exists(bcftools))
+
+
+bcftools  <- file.path(conda_bin, "bcftools")
+samtools  <- file.path(conda_bin, "samtools") 
+
+stopifnot(file.exists(bcftools))
+
+ref_fa <- "swb25_genomic.fna"
+stopifnot(file.exists(ref_fa))
+
+if (!file.exists(paste0(ref_fa, ".fai"))) {
+  system(paste(shQuote(samtools), "faidx", shQuote(ref_fa)))
+}
+
+bam_dir <- "variant_calling/bam"
+vcf_dir <- "variant_calling/vcf"
+dir.create(vcf_dir, showWarnings = FALSE, recursive = TRUE)
+```
+
+
+```{r}
+run_cmd <- function(cmd, quiet = TRUE) {
+  status <- system(cmd, ignore.stdout = quiet, ignore.stderr = quiet)
+  if (status != 0) stop("Command failed (exit ", status, "):\n", cmd, call. = FALSE)
+  invisible(status)
+}
+
+call_one_bcftools <- function(sample, bam, ref_fa, vcf_dir, threads = 8) {
+
+  vcf_out  <- file.path(vcf_dir, paste0(sample, "_bcftools.vcf"))
+  log_call <- file.path(vcf_dir, paste0(sample, "_bcftools.log"))
+
+  stopifnot(file.exists(ref_fa))
+
+  if (file.exists(vcf_out)) {
+    message("skip (exists): ", vcf_out)
+    return(tibble::tibble(sample = sample, bam = bam, vcf = vcf_out))
+  }
+
+  cmd_call <- paste0(
+    shQuote(bcftools), " mpileup -Ou ",
+    "-f ", shQuote(ref_fa), " ",
+    "-Q 0 -A -d 1000000 ",
+    shQuote(bam),
+    " 2> ", shQuote(log_call),
+    " | ",
+    shQuote(bcftools), " call -mv -Ov ",
+    "-o ", shQuote(vcf_out),
+    " 2>> ", shQuote(log_call)
+  )
+
+  run_cmd(cmd_call, quiet = TRUE)
+
+  tibble::tibble(sample = sample, bam = bam, vcf = vcf_out)
+}
+```
+
+```{r}
+
+bams <- list.files(bam_dir,
+                   pattern = "\\.sorted\\.bam$",
+                   full.names = TRUE)
+
+bam_tbl <- tibble(
+  bam = bams,
+  sample = str_replace(basename(bams),
+                       "\\.sorted\\.bam$", "")
+)
+
+vcf_results <- pmap_dfr(
+  bam_tbl,
+  ~ call_one_bcftools(
+      sample  = ..2,
+      bam     = ..1,
+      ref_fa  = ref_fa,
+      vcf_dir = vcf_dir,
+      threads = 8
+  )
+)
+
+vcf_results
+
+```
+
+```{r}
+gff <- "genomic.gff"
+bed <- "genomic.genes.bed"
+
+gff_df <- read_tsv(
+  gff,
+  comment = "#",
+  col_names = c(
+    "seqid","source","type",
+    "start","end","score",
+    "strand","phase","attr"
+  ),
+  col_types = cols(.default = "c")
+)
+
+genes_bed <- gff_df %>%
+  filter(type == "gene") %>%
+  mutate(
+    start = as.integer(start),
+    end   = as.integer(end),
+
+    bed_start = pmax(start - 1L, 0L),
+    bed_end   = end,
+
+    gene_id = str_match(attr, "locus_tag=([^;]+)")[,2]
+  ) %>%
+  select(seqid, bed_start, bed_end, gene_id)
+
+write_tsv(genes_bed, bed, col_names = FALSE)
+
+cat("BED created successfully:\n")
+print(head(genes_bed, 3))
+```
+```{r}
+gene_hdr <- "gene_header.hdr"
+writeLines(
+  '##INFO=<ID=GENE,Number=.,Type=String,Description="Gene overlap from genomic.gff (locus_tag)">',
+  gene_hdr
+)
+
+bcftools <- "/opt/anaconda3/envs/mapcall/bin/bcftools"
+
+bed <- "genomic.genes.bed"
+hdr <- "gene_header.hdr"
+
+stopifnot(file.exists(bed), file.exists(hdr))
+
+annotate_one_vcf <- function(vcf_in, bcftools, bed, hdr) {
+  vcf_out <- sub("\\.vcf$", ".gene.vcf", vcf_in)
+
+  if (file.exists(vcf_out)) {
+    message("skip (exists): ", vcf_out)
+    return(tibble::tibble(vcf_in = vcf_in, vcf_out = vcf_out))
+  }
+
+  cmd <- paste0(
+    shQuote(bcftools), " annotate ",
+    "-h ", shQuote(hdr), " ",
+    "-a ", shQuote(bed), " ",
+    "-c CHROM,FROM,TO,INFO/GENE ",
+    "-Ov -o ", shQuote(vcf_out), " ",
+    shQuote(vcf_in)
+  )
+
+  run_cmd(cmd, quiet = TRUE)
+  tibble::tibble(vcf_in = vcf_in, vcf_out = vcf_out)
+}
+
+vcf_files <- list.files(vcf_dir, pattern = "_bcftools\\.vcf$", full.names = TRUE)
+
+gene_vcfs <- map_dfr(vcf_files, annotate_one_vcf, bcftools = bcftools, bed = bed, hdr = hdr)
+
+gene_vcfs
+```
+
+
+```{r}
+read_gene_vcf <- function(vcf_file, out_dir = "variant_tables") {
+
+  dir.create(out_dir, showWarnings = FALSE)
+
+  df <- read_tsv(
+    vcf_file,
+    comment = "#",
+    col_names = c(
+      "CHROM","POS","ID","REF","ALT",
+      "QUAL","FILTER","INFO","FORMAT","SAMPLE"
+    ),
+    col_types = cols(.default = "c")
+  ) %>%
+    mutate(
+      sample = basename(vcf_file) %>%
+        str_remove("_bcftools\\.gene\\.vcf$"),
+
+      GENE = str_match(INFO, "GENE=([^;]+)")[,2]
+    ) %>%
+    select(sample, CHROM, POS, REF, ALT, GENE, everything())
+
+  out_file <- file.path(
+    out_dir,
+    paste0(df$sample[1], "_variants.tsv")
+  )
+
+  write_tsv(df, out_file)
+
+  df
+}
+
+gene_vcfs <- list.files(
+  vcf_dir,
+  pattern = "_bcftools\\.gene\\.vcf$",
+  full.names = TRUE
+)
+
+variants_tbl <- map_dfr(gene_vcfs, read_gene_vcf)
+```
+
+
+```{r}
+library(readr)
+library(dplyr)
+library(stringr)
+library(purrr)
+library(tidyr)
+
+variant_dir <- "variant_tables"
+
+files <- list.files(
+  variant_dir,
+  pattern = "_variants\\.tsv$",
+  full.names = TRUE
+)
+
+all_vars <- map_dfr(files, function(f) {
+
+  sample_name <- basename(f) %>%
+    str_remove("_variants\\.tsv$")
+
+  read_tsv(f, col_types = cols(.default = "c")) %>%
+    mutate(
+      condition = sample_name,
+      POS = as.integer(POS),
+      is_genic = !is.na(GENE) & GENE != ""
+    )
+})
+
+all_vars <- all_vars %>%
+  mutate(
+    row_id = if_else(
+      is_genic,
+      paste0("GENE:", GENE),
+      paste0("VAR:", CHROM, ":", POS, " ", REF, ">", ALT, " @", condition)
+    ),
+    row_label = if_else(
+      is_genic,
+      GENE,
+      paste0(CHROM, ":", POS, " ", REF, ">", ALT)
+    )
+  )
+
+presence_tbl <- all_vars %>%
+  distinct(row_id, row_label, condition) %>%
+  mutate(present = TRUE)
+
+
+variant_matrix <- presence_tbl %>%
+  pivot_wider(
+    names_from = condition,
+    values_from = present,
+    values_fill = FALSE
+  ) %>%
+  arrange(row_label)
+
+
+write_tsv(variant_matrix, file.path(variant_dir, "merged_variant_matrix.tsv"))
+```
+
+```{r}
+library(dplyr)
+library(pheatmap)
+library(stringr)
+
+
+variant_matrix_genes <- variant_matrix %>%
+  filter(str_starts(row_id, "GENE:"))
+
+
+variant_matrix_genes <- variant_matrix_genes %>%
+  mutate(GENE = str_remove(row_id, "^GENE:"))
+
+
+cond_cols <- setdiff(
+  names(variant_matrix_genes),
+  c("row_id", "row_label", "GENE", "VARIANT")
+)
+
+
+variant_matrix_genes <- variant_matrix_genes %>%
+  filter(rowSums(across(all_of(cond_cols))) >= 2)
+
+
+mat <- variant_matrix_genes %>%
+  select(all_of(cond_cols)) %>%
+  as.matrix()
+
+mode(mat) <- "numeric"
+
+rownames(mat) <- variant_matrix_genes$GENE
+
+pheatmap(
+  mat,
+  cluster_rows = TRUE,
+  cluster_cols = TRUE,
+  color = c("white", "firebrick"),
+  border_color = NA,
+  fontsize_row = 8,
+  fontsize_col = 10,
+  main = "Shared Gene Mutations Across Conditions"
+)
+```
+
+```{r}
+colnames(mat) <- str_remove(colnames(mat), "_fastq$")
+pheatmap(
+  mat,
+  cluster_rows = TRUE,
+  cluster_cols = TRUE,
+  border_color = NA,
+  fontsize_row = 8,
+  fontsize_col = 10,
+  main = "Shared Gene Mutations Across Conditions",
+  filename = "variant_calling/shared_gene_mutations_heatmap.png",
+  width = 10, height = 7
+)
+```
+
