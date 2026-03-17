@@ -1,0 +1,5 @@
+strain,p_adj,statistic,p.value,method,alternative
+0286,3.2370335978324955e-17,6064,8.092583994581239e-18,Wilcoxon rank sum test with continuity correction,two.sided
+2209,0.8153830552997556,13649,0.8153830552997556,Wilcoxon rank sum test with continuity correction,two.sided
+2630,0.001337106121278988,10526,6.68553060639494e-4,Wilcoxon rank sum test with continuity correction,two.sided
+4895,0.8153830552997556,13748,0.7272580492733467,Wilcoxon rank sum test with continuity correction,two.sided
