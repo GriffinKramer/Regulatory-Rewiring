@@ -3,7 +3,7 @@ Transcriptional Consequences of σ⁵⁴ Regulatory Rewiring in Pseudomonas fluo
 
 1.Upregulation Sigma54
 
-Calculated Log2FC from evolved vs ancestral strains. Annotates with sigma54 EBPs and targets. Data visualization and σ⁵⁴-target gene vs other genes wilcoxon (Figure 1a, Figure 4b).
+Calculated Log2FC from evolved vs ancestral strains. Annotates with sigma54 EBPs and targets. Data visualization and σ⁵⁴-target gene vs other genes wilcoxon (Figure 1a, Figure 3b).
 
 2.Upregulation Across Events
 
